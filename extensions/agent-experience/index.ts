@@ -4542,7 +4542,7 @@ async function handleReviewSetup(ctx: ExtensionContext) {
 		);
 		const choice = await chooseSetup(
 			ctx,
-			`Review suggested habits — ${plural(entries.length, "suggestion")} waiting`,
+			`Review suggestions — ${plural(entries.length, "suggestion")} waiting`,
 			[...labels, "Back to setup"],
 			false,
 		);
