@@ -130,7 +130,7 @@ export function buildSetupItems(view: SetupView, snapshot: SetupSnapshot): Setti
 			];
 		return [
 			...advisorItems,
-			actionItem("selector", "Use approved habits", checkboxValue(active(config, config.selector_enabled)), "Apply only human-approved habits directly before replies; this is independent from Advisor context."),
+			actionItem("selector", "Use approved habits", checkboxValue(active(config, config.selector_enabled)), "Apply only human-approved habits directly before replies. Requires 'Local semantic matching' in Manage habits for reliable matching."),
 			actionItem("assessmentModel", "Habit-assessment model", config.selector_model || "choose model", "Choose the authenticated model that checks whether approved habits apply."),
 			actionItem("back", "Back"),
 		];
@@ -139,7 +139,7 @@ export function buildSetupItems(view: SetupView, snapshot: SetupSnapshot): Setti
 		return [
 			actionItem("habits", "Review approved habits", reviewAvailable ? String(counts.approved) : "Needs attention", "Inspect, disable, re-enable, or archive an approved habit."),
 			actionItem("duplicates", "Resolve possible duplicates", reviewAvailable ? `${counts.duplicates} waiting` : "Needs attention", "Review each possible duplicate before any change."),
-			actionItem("embedding", "Prevent duplicate habits", checkboxValue(active(config, config.embedding_enabled)), "Compare habit wording locally and route possible matches for review."),
+			actionItem("embedding", "Local semantic matching", checkboxValue(active(config, config.embedding_enabled)), "Enables the local embedding model that powers smart habit matching for steering and prevents duplicate habits. Required for reliable habit steering."),
 			actionItem("back", "Back"),
 		];
 	}
