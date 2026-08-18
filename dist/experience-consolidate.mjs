@@ -1047,7 +1047,7 @@ var init_observations = __esm({
 // bin/experience-consolidate.mjs
 import { existsSync as existsSync3 } from "node:fs";
 import { readFile as readFile10 } from "node:fs/promises";
-import { dirname as dirname3, resolve as resolve3 } from "node:path";
+import { dirname as dirname4, resolve as resolve3 } from "node:path";
 init_paths();
 
 // extensions/agent-experience/src/storage/sqlite.ts
@@ -5035,6 +5035,24 @@ init_checksum();
 init_private_root();
 init_redaction();
 
+// extensions/agent-experience/src/diagnostics.ts
+import { appendFileSync, mkdirSync } from "node:fs";
+import { dirname as dirname3, join as join4 } from "node:path";
+import { homedir as homedir2 } from "node:os";
+var LOG_PATH = join4(homedir2(), ".agents", "experience", "diagnostics.log");
+var _dir = false;
+function diagLog(component, event, message, data) {
+  if (process.env.AX_DIAGNOSTICS === "0") return;
+  try {
+    if (!_dir) {
+      mkdirSync(dirname3(LOG_PATH), { recursive: true });
+      _dir = true;
+    }
+    appendFileSync(LOG_PATH, JSON.stringify({ ts: (/* @__PURE__ */ new Date()).toISOString(), component, event, message, ...data }) + "\n");
+  } catch {
+  }
+}
+
 // extensions/agent-experience/src/selector-vector.ts
 init_checksum();
 init_private_root();
@@ -5291,6 +5309,7 @@ async function promoteApprovedPendingCandidates(db, input) {
   const rows = db.prepare("SELECT * FROM habits WHERE user_id = ? AND status IN ('candidate','suppressed_by_law') ORDER BY id").all(userId).filter((row) => waitingStatuses.has(parseJson3(row.data_json).review_status)).filter((row) => !testIds || testIds.has(row.id));
   const promoted = [];
   const blocked = [];
+  diagLog("candidate", "promotion_entry", "promoteApprovedPendingCandidates started", { rows: rows.length, userId });
   for (const initial of rows) {
     const initialData = parseJson3(initial.data_json);
     const currentIdentity = normalizedApprovalIdentity(initial);
@@ -5358,6 +5377,7 @@ async function promoteApprovedPendingCandidates(db, input) {
     if (outcome.result?.promoted) promoted.push(initial.id);
     else blocked.push({ id: initial.id, reason: outcome.result?.reason || outcome.semantic.reason });
   }
+  diagLog("candidate", "promotion_result", "promoteApprovedPendingCandidates finished", { checked: rows.length, promoted: promoted.length, blocked: blocked.length, blockedReasons: blocked.map((b) => b.reason) });
   return { user_id: userId, checked: rows.length, promoted, blocked };
 }
 
