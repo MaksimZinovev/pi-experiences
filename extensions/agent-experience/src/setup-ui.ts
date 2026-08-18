@@ -115,7 +115,7 @@ export function buildSetupItems(view: SetupView, snapshot: SetupSnapshot): Setti
 			actionItem("capture", "Learn from conversations", checkboxValue(active(config, config.capture_enabled)), "Save bounded, redacted completed conversation examples locally. Suggestions always wait for review."),
 			actionItem("learningModel", "Habit-learning model", config.consolidation_model || "choose model", "Choose the authenticated model used by Analyze."),
 			actionItem("analyze", "Analyze waiting examples", `${counts.observations} waiting`, "Create suggestions for review; nothing is auto-approved."),
-			actionItem("review", "Review suggested habits", reviewAvailable ? `${counts.suggestions} waiting` : "Needs attention", "Approve or reject each suggestion explicitly."),
+			actionItem("review", "Review suggestions", reviewAvailable ? `${counts.suggestions} waiting` : "Needs attention", "Review and approve candidate experiences and habit suggestions."),
 			actionItem("back", "Back"),
 		];
 	}
