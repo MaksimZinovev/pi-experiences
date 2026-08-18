@@ -61,8 +61,10 @@
     "@earendil-works/pi-ai": "latest",
     "@earendil-works/pi-coding-agent": "^0.83.0",
     "@earendil-works/pi-tui": "^0.80.3",
+    "@types/node": "^22.20.1",
     "esbuild": "^0.28.1",
-    "onnxruntime-web": "1.27.0"
+    "onnxruntime-web": "1.27.0",
+    "typescript": "^5.9.3"
   },
   "pi": {
     "extensions": [

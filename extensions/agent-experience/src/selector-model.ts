@@ -1,6 +1,7 @@
 import { completeSimple } from "@earendil-works/pi-ai/compat";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { SelectorModelAdapter } from "./selector.ts";
+import { diagLog } from "./diagnostics.ts";
 
 export const DEFAULT_SELECTOR_MODEL = "openai-codex/gpt-5.4-mini";
 
@@ -92,10 +93,21 @@ export function createPiSelectorModelAdapter(ctx: Pick<ExtensionContext, "modelR
 				if (response?.stopReason === "length") throw new Error("selector_model_truncated_response");
 				if (response?.stopReason && response.stopReason !== "stop") throw new Error("selector_model_call_failed");
 				const text = extractText(response);
-				if (!text.trim()) throw new Error("selector_model_empty_response");
+				if (!text.trim()) {
+					diagLog("selector", "empty_response", "Model returned empty text", { model: input.model, stopReason: response?.stopReason });
+					throw new Error("selector_model_empty_response");
+				}
 				try {
 					return JSON.parse(text);
 				} catch {
+					diagLog("selector", "json_parse_failed", "Model response failed JSON.parse", {
+						model: input.model,
+						textLen: text.length,
+						first200: text.slice(0, 200),
+						last200: text.slice(-200),
+						hasFence: text.includes("```"),
+						reasoningContent: !!(response as any)?.reasoningContent,
+					});
 					throw new Error("selector_model_invalid_json");
 				}
 			} catch (error) {

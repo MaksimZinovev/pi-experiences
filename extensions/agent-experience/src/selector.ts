@@ -1,6 +1,7 @@
 import { canonicalJson, checksumJson, sha256Hex } from "./storage/checksum.ts";
 import { normalizeUserId } from "./storage/private-root.ts";
 import { containsUnredactedSensitiveText, redactJson, redactText } from "./storage/redaction.ts";
+import { diagLog } from "./diagnostics.ts";
 import { buildTypedStorageRow } from "./storage/sqlite.ts";
 import { activationEligibilityFromHabit, checkHabitConflict, checkHabitLaw, revalidateLawSnapshotSync, type LawSnapshot } from "./review.ts";
 import { runAtomicSemanticActivation } from "./semantic/service.ts";
@@ -469,7 +470,8 @@ export async function runSelectorRuntime(db: any, input: {
 	const userId = normalizeUserId(input.userId);
 	const config = input.config;
 	const hash = promptHash(input.prompt);
-	if (!config.enabled || !config.selector_enabled) return noInjection("selector_disabled");
+	if (!config.enabled || !config.selector_enabled) { diagLog("selector", "skipped", "selector_disabled", { enabled: config.enabled, selector_enabled: config.selector_enabled, model: config.selector_model, embedding: config.embedding_enabled }); return noInjection("selector_disabled"); }
+	diagLog("selector", "entry", "runSelectorRuntime invoked", { model: config.selector_model, embedding: config.embedding_enabled, hasAdapter: !!input.adapter, hasEmbeddingAdapter: !!input.embeddingAdapter, selector_enabled: config.selector_enabled });
 	let contextTurns: SteeringContextTurn[] = [];
 	try {
 		contextTurns = boundedSelectorContextTurns(input.contextTurns);
@@ -507,7 +509,7 @@ export async function runSelectorRuntime(db: any, input: {
 	}
 	const lawFresh = allActive.filter((candidate) => candidate.law_hash === law.hash);
 	const eligible = capSelectorCandidatesToBound(filterEligibleSelectorCandidates(lawFresh, { minConfidenceBp: config.selector_min_confidence_bp, stalenessMax: config.selector_staleness_max }));
-	if (!eligible.length) return noInjection(allActive.length ? "no_fresh_active_candidates" : "no_active_candidates");
+	if (!eligible.length) { diagLog("selector", "skipped", allActive.length ? "no_fresh_active_candidates" : "no_active_candidates", { allActive: allActive.length, lawFresh: lawFresh.length }); return noInjection(allActive.length ? "no_fresh_active_candidates" : "no_active_candidates"); }
 	let retrieved: RetrievedSelectorCandidate[];
 	try {
 		const conditionVectors = readSelectorConditionVectors(db, { userId, candidates: eligible, embeddingAdapter: input.embeddingAdapter });
@@ -555,7 +557,7 @@ export async function runSelectorRuntime(db: any, input: {
 		tryInsertSelectorFailureLog(db, { userId, reason: "invalid_selector_output", stage: "judge_parse", mode: selectorMode, model: config.selector_model, createdAt: input.now, latencyMs: Date.now() - started, retrievalMode: promptVectors.retrievalMode });
 		return noInjection("invalid_selector_output");
 	}
-	if (!selected.length) return noInjection("empty_selection");
+	if (!selected.length) { diagLog("selector", "skipped", "empty_selection", { retrieved: retrieved.length, model: config.selector_model }); return noInjection("empty_selection"); }
 	let selectedCandidates: SelectorCandidate[];
 	try {
 		selectedCandidates = revalidateSelectedCandidates(db, { userId, selected, retrieved, lawHash: law.hash, minConfidenceBp: config.selector_min_confidence_bp, stalenessMax: config.selector_staleness_max });
@@ -579,6 +581,7 @@ export async function runSelectorRuntime(db: any, input: {
 		try { db.exec("ROLLBACK"); } catch {}
 		return noInjection("hit_log_write_failed");
 	}
+	diagLog("selector", "success", "habit steering injected", { selectedCount: selected.length, model: modelLabel, latencyMs: Date.now() - started });
 	return { injected: true, reason: "selected", message, selected, candidates: selectedCandidates, latency_ms: Date.now() - started, mode: selectorMode, model: modelLabel };
 }
 
@@ -629,6 +632,7 @@ export async function promoteApprovedPendingCandidates(db: any, input: { userId:
 		.filter((row: any) => !testIds || testIds.has(row.id));
 	const promoted: string[] = [];
 	const blocked: Array<{ id: string; reason: string }> = [];
+	diagLog("candidate", "promotion_entry", "promoteApprovedPendingCandidates started", { rows: rows.length, userId });
 	for (const initial of rows) {
 		const initialData = parseJson(initial.data_json);
 		const currentIdentity = normalizedApprovalIdentity(initial);
@@ -693,5 +697,6 @@ export async function promoteApprovedPendingCandidates(db: any, input: { userId:
 		if (outcome.result?.promoted) promoted.push(initial.id);
 		else blocked.push({ id: initial.id, reason: outcome.result?.reason || outcome.semantic.reason });
 	}
+	diagLog("candidate", "promotion_result", "promoteApprovedPendingCandidates finished", { checked: rows.length, promoted: promoted.length, blocked: blocked.length, blockedReasons: blocked.map((b) => b.reason) });
 	return { user_id: userId, checked: rows.length, promoted, blocked };
 }

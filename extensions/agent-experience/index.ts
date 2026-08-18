@@ -67,6 +67,7 @@ import { CapturePairBuffer, buildPairPayload, type CompletedPair, type CloseReas
 import { extractSingleFinalAssistantText } from "./src/capture/extract.ts";
 import { promoteApprovedPendingCandidates, runSelectorRuntime, selectActiveSelectorSnapshot, selectorCandidatesForPreparation, type SelectorModelAdapter } from "./src/selector.ts";
 import { createPiSelectorModelAdapter } from "./src/selector-model.ts";
+import { diagLog } from "./src/diagnostics.ts";
 import { prepareSelectorConditionVectors } from "./src/selector-vector.ts";
 import { extractSteeringContext, latestUserMessageBoundary, type SteeringContextTurn } from "./src/steering-context.ts";
 import { prepareActiveSelectorVectorsAfterChange } from "./src/selector-maintenance.ts";
@@ -2257,20 +2258,20 @@ async function handleDuplicateResolutionSetup(ctx: ExtensionCommandContext) {
 			notify(ctx, `${formatReviewReadError(error)}\nReopening duplicate list with current data.`, "warn");
 			continue;
 		}
-		comparison: while (true) {
+		while (true) {
 			const actionLabel = await chooseActionInPanel(ctx, "Resolve duplicate habits", formatDuplicateForHuman(item, data.habits), [...resolutionChoices.map((entry) => entry.label), DUPLICATE_BACK]);
 			if (!actionLabel || actionLabel === DUPLICATE_BACK) continue duplicateList;
 			const selected = resolutionChoices.find((entry) => entry.label === actionLabel);
 			if (!selected) continue duplicateList;
 			if (selected.requiresConfirmation) {
 				const confirmation = await chooseActionInPanel(ctx, "Confirm duplicate resolution", formatDuplicateConfirmation(selected, item), [DUPLICATE_CONFIRM_BACK, DUPLICATE_CONFIRM]);
-				if (confirmation !== DUPLICATE_CONFIRM) continue comparison;
+				if (confirmation !== DUPLICATE_CONFIRM) continue;
 			}
 			try {
 				let reason = "setup";
 				if (selected.action === "keep_separate") {
 					const typedReason = await inputSetup(ctx, "Reason to keep these habits separate", "short reason, e.g. different context or scope");
-					if (typedReason === undefined) continue comparison;
+					if (typedReason === undefined) continue;
 					reason = typedReason.trim() ? redactText(typedReason).slice(0, 300) : "user chose keep separate in setup";
 				}
 				await withReviewStorage(async (storage) => {
@@ -4519,6 +4520,7 @@ export default function agentExperienceExtension(pi: ExtensionAPI) {
 			// never launch another selector call or re-extract context for this message.
 			state.phase = "attempted";
 			if (ctx.mode !== "tui" || !steeringRendererReady || typeof pi.appendEntry !== "function") {
+				diagLog("lifecycle", "skipped", "steering_provenance_unavailable", { mode: ctx.mode, steeringRendererReady, hasAppendEntry: typeof pi.appendEntry === "function" });
 				notifyDedupedDiagnostic(ctx, selectorDiagnosticsShown, {
 					key: "selector-runtime:steering-provenance-unavailable",
 					message: "Agent Experience habit steering was suppressed because response-specific visual provenance is unavailable in this interface. No habit guidance was injected.",
@@ -4533,8 +4535,8 @@ export default function agentExperienceExtension(pi: ExtensionAPI) {
 				notifyDedupedDiagnostic(ctx, selectorDiagnosticsShown, { key: "selector-runtime:config-read-failed", message: `Agent Experience approved-habit reminders are paused because config could not be read: ${redactText(String((error as any)?.message || error)).slice(0, 300)}` });
 				return;
 			}
-			if (!config.enabled || !config.selector_enabled) return;
-			if (!(await fileExists(resolvePrivatePath(paths.root, "ledger.sqlite")))) return;
+			if (!config.enabled || !config.selector_enabled) { diagLog("lifecycle", "skipped", "config_disabled", { enabled: config.enabled, selector_enabled: config.selector_enabled, selector_model: config.selector_model, embedding_enabled: config.embedding_enabled }); return; }
+			if (!(await fileExists(resolvePrivatePath(paths.root, "ledger.sqlite")))) { diagLog("lifecycle", "skipped", "ledger_not_found", { root: paths.root }); return; }
 			let storage: Awaited<ReturnType<typeof openExistingExperienceStorage>> | undefined;
 			try {
 				storage = await openExistingExperienceStorage(paths.root, { userId: getConfiguredUserId() });
@@ -4543,6 +4545,7 @@ export default function agentExperienceExtension(pi: ExtensionAPI) {
 				const embeddingAdapter = await selectorRuntimeEmbeddingAdapter(storage.root);
 				const now = new Date().toISOString();
 				const result = await runSelectorRuntime(storage.db, { userId: storage.userId, prompt: state.prompt, contextTurns: state.contextTurns, config, law, now, adapter, embeddingAdapter, signal: ctx.signal });
+				diagLog("lifecycle", "result", result.injected ? "injected" : "not_injected", { reason: result.reason, model: config.selector_model, hasEmbeddingAdapter: !!embeddingAdapter, mode: (result as any).mode });
 				if (pendingSteeringRuns.get(steeringScope) !== state || !result.injected || !result.message) return;
 				try {
 					state.entry = buildHabitSteeringEntry({ candidates: result.candidates, selected: result.selected, createdAt: now });
